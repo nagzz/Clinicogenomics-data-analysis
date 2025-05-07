@@ -807,6 +807,7 @@ directory_path <- "/fs/scratch/PAS1348/orien/2024_01_10/RNAseq/gene_and_transcri
 slid_file <- "/fs/ess/PAS1348/nagesh/orien/scripts/SLIDlist.txt"
 combined_data <- process_all_files(directory_path, slid_file)
 
+#Differential expression analysis wildtype Vs Mut
 library(limma)
 library(edgeR)
 library(pheatmap)
