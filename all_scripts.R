@@ -2753,3 +2753,241 @@ for(stage in stages) {
         cat("  -", low_venn_png, "\n")
     }
 } 
+
+
+
+#Analysis of I, II and III stages cell population
+
+# R script for cell population analysis
+# Load required libraries
+library(tidyverse)
+
+# Define cell types and stages to analyze
+cell_types <- c("Macrophages M1", "T cells CD8")
+stages <- c("I", "II", "III")  # Added stage I as requested
+
+# Define consistent colors for cell types (kept for potential future use)
+m1_color <- "steelblue"  # Color for Macrophages M1
+cd8_color <- "darkred"   # Color for T cells CD8
+
+# Step 1: Merge the datasets and fix the Type column
+merged_data <- annotation_clean %>%
+    mutate(Type = as.character(Type)) %>%
+    inner_join(cibersortx, by = c("SampleID" = "Mixture"))
+
+# Step 2: Process each stage
+for(stage in stages) {
+    cat("\n\n========= ANALYSIS FOR STAGE", stage, "=========\n")
+    
+    # Filter for current stage
+    stage_data <- merged_data %>% filter(Stage == stage)
+    
+    # Process each cell type  
+    results_list <- list()
+    
+    for(cell_type in cell_types) {
+        cat("\n--- Analysis for", cell_type, "---\n")
+        
+        # Step 3: Separate wild type and mutant data
+        wt_data <- stage_data %>% filter(Type == "wild")
+        mut_data <- stage_data %>% filter(Type == "mut")
+        
+        cat("Number of wild type samples:", nrow(wt_data), "\n")
+        cat("Number of mutant samples:", nrow(mut_data), "\n")
+        
+        # Step 4: Remove outliers from wild type data
+        if(nrow(wt_data) > 0) {
+            q1_wt <- quantile(wt_data[[cell_type]], 0.25, na.rm = TRUE)
+            q3_wt <- quantile(wt_data[[cell_type]], 0.75, na.rm = TRUE)
+            iqr_wt <- q3_wt - q1_wt
+            
+            lower_bound_wt <- q1_wt - 1.5 * iqr_wt
+            upper_bound_wt <- q3_wt + 1.5 * iqr_wt
+            
+            wt_filtered <- wt_data %>% 
+                filter(!!sym(cell_type) >= lower_bound_wt & !!sym(cell_type) <= upper_bound_wt)
+            
+            cat("Wild type samples after outlier removal:", nrow(wt_filtered), "\n")
+            
+            # Step 5: Use highest value from wild type as cutoff
+            cutoff <- max(wt_filtered[[cell_type]])
+            cat("Cutoff value (highest wild type value after outlier removal):", cutoff, "\n")
+        } else {
+            # If no wild type data, use highest value of mutant data after outlier removal
+            q1_mut <- quantile(mut_data[[cell_type]], 0.25, na.rm = TRUE)
+            q3_mut <- quantile(mut_data[[cell_type]], 0.75, na.rm = TRUE)
+            iqr_mut <- q3_mut - q1_mut
+            
+            lower_bound_mut <- q1_mut - 1.5 * iqr_mut
+            upper_bound_mut <- q3_mut + 1.5 * iqr_mut
+            
+            mut_filtered_for_cutoff <- mut_data %>% 
+                filter(!!sym(cell_type) >= lower_bound_mut & !!sym(cell_type) <= upper_bound_mut)
+            
+            cutoff <- max(mut_filtered_for_cutoff[[cell_type]])
+            cat("Cutoff value (highest mutant value after outlier removal):", cutoff, "\n")
+        }
+        
+        # Step 6: Remove outliers from mutant data
+        if(nrow(mut_data) > 0) {
+            q1_mut <- quantile(mut_data[[cell_type]], 0.25, na.rm = TRUE)
+            q3_mut <- quantile(mut_data[[cell_type]], 0.75, na.rm = TRUE)
+            iqr_mut <- q3_mut - q1_mut
+            
+            lower_bound_mut <- q1_mut - 1.5 * iqr_mut
+            upper_bound_mut <- q3_mut + 1.5 * iqr_mut
+            
+            mut_filtered <- mut_data %>% 
+                filter(!!sym(cell_type) >= lower_bound_mut & !!sym(cell_type) <= upper_bound_mut)
+            
+            cat("Mutant samples after outlier removal:", nrow(mut_filtered), "\n")
+            
+            # Step 7: Classify mutant patients as high or low based on cutoff
+            mut_classified <- mut_filtered %>%
+                mutate(Classification = ifelse(!!sym(cell_type) > cutoff, "High", "Low"))
+            
+            # Step 7a: All wild type samples (after outlier removal) are classified as "Low"
+            wt_classified <- NULL
+            if(nrow(wt_filtered) > 0) {
+                wt_classified <- wt_filtered %>%
+                    mutate(Classification = "Low")  # All wild type samples are "Low"
+            }
+            
+            # Step 7b: Combine mutant and wild type classifications
+            all_classified <- bind_rows(mut_classified, wt_classified)
+            
+            # Step 8: Extract high and low patient lists
+            high_patients <- all_classified %>%
+                filter(Classification == "High") %>%
+                pull(SampleID)
+            
+            low_patients <- all_classified %>%
+                filter(Classification == "Low") %>%
+                pull(SampleID)
+            
+            # Step 9: Generate and print summary statistics
+            summary_stats <- all_classified %>%
+                group_by(Classification) %>%
+                summarize(
+                    Count = n(),
+                    Mean = mean(!!sym(cell_type)),
+                    Median = median(!!sym(cell_type)),
+                    Min = min(!!sym(cell_type)),
+                    Max = max(!!sym(cell_type))
+                )
+            
+            print(summary_stats)
+            
+            # Step 10: Store results for later comparison
+            results_list[[cell_type]] <- list(
+                filtered_data = all_classified,
+                high_patients = high_patients,
+                low_patients = low_patients,
+                cutoff = cutoff,
+                summary_stats = summary_stats
+            )
+            
+            # Create classification dataframe with proper column naming
+            classification_df <- all_classified %>%
+                select(SampleID, !!sym(cell_type))
+            
+            # Add classification column with a conventional name
+            classification_col_name <- paste0(gsub(" ", "_", cell_type), "_Classification")
+            classification_df[[classification_col_name]] <- all_classified$Classification
+            
+            # Add Type column to identify wild vs mutant samples
+            classification_df$Type <- all_classified$Type
+            
+            # Create a new path for the output file
+            output_file <- paste0("Stage_", stage, "_", gsub(" ", "_", cell_type), "_classification.csv")
+            
+            # Check and attempt to remove the file if it exists (to avoid permission errors)
+            if (file.exists(output_file)) {
+                try(file.remove(output_file), silent = TRUE)
+            }
+            
+            # Join with merged_df to get Patient IDs
+            classification_with_patient_id <- classification_df %>%
+                inner_join(merged_df, by = c("SampleID" = "WES_id")) %>%
+                select(`Patient ID`, `Sample ID`, SampleID, everything())
+            
+            # Write results to CSV with error handling
+            tryCatch({
+                write.csv(
+                    classification_with_patient_id,
+                    output_file,
+                    row.names = FALSE
+                )
+                cat("Successfully saved:", output_file, "\n")
+            }, error = function(e) {
+                cat("Error saving file:", output_file, "\n")
+                cat("Error message:", e$message, "\n")
+            })
+        }
+    }
+    
+    # Step 11: Analyze overlaps between cell types (if both analyzed)
+    if(length(results_list) == 2) {
+        # Get high patients from both cell types
+        high_m1 <- results_list[[cell_types[1]]]$high_patients
+        high_cd8 <- results_list[[cell_types[2]]]$high_patients
+        
+        # Get low patients from both cell types
+        low_m1 <- results_list[[cell_types[1]]]$low_patients
+        low_cd8 <- results_list[[cell_types[2]]]$low_patients
+        
+        # Find overlaps for HIGH group
+        high_overlapping <- intersect(high_m1, high_cd8)
+        
+        # Find overlaps for LOW group
+        low_overlapping <- intersect(low_m1, low_cd8)
+        
+        # Print overlap analysis
+        cat("\n===== Overlap Analysis for Stage", stage, "=====\n")
+        cat("High", cell_types[1], "patients:", length(high_m1), "\n")
+        cat("High", cell_types[2], "patients:", length(high_cd8), "\n")
+        cat("Overlapping patients (high in both):", length(high_overlapping), "\n")
+        cat("Low", cell_types[1], "patients:", length(low_m1), "\n")
+        cat("Low", cell_types[2], "patients:", length(low_cd8), "\n")
+        cat("Overlapping patients (low in both):", length(low_overlapping), "\n")
+        
+        # Step 12: Create comprehensive classification dataframe
+        m1_class_df <- results_list[[cell_types[1]]]$filtered_data %>% 
+            select(SampleID, !!sym(cell_types[1]))
+        m1_class_df[[paste0(gsub(" ", "_", cell_types[1]), "_Classification")]] <- 
+            results_list[[cell_types[1]]]$filtered_data$Classification
+        
+        cd8_class_df <- results_list[[cell_types[2]]]$filtered_data %>% 
+            select(SampleID, !!sym(cell_types[2]))
+        cd8_class_df[[paste0(gsub(" ", "_", cell_types[2]), "_Classification")]] <- 
+            results_list[[cell_types[2]]]$filtered_data$Classification
+        
+        # Join the classification dataframes
+        comprehensive_classification <- full_join(
+            m1_class_df,
+            cd8_class_df,
+            by = "SampleID"
+        )
+        
+        # Output file for comprehensive classification
+        comprehensive_file <- paste0("Stage_", stage, "_Comprehensive_Classification.csv")
+        
+        # Join with merged_df to get Patient IDs
+        comprehensive_with_patient_id <- comprehensive_classification %>%
+            inner_join(merged_df, by = c("SampleID" = "WES_id")) %>%
+            select(`Patient ID`, `Sample ID`, SampleID, everything())
+        
+        # Save comprehensive classification with error handling
+        tryCatch({
+            write.csv(
+                comprehensive_with_patient_id,
+                comprehensive_file,
+                row.names = FALSE
+            )
+            cat("Successfully saved:", comprehensive_file, "\n")
+        }, error = function(e) {
+            cat("Error saving file:", comprehensive_file, "\n")
+            cat("Error message:", e$message, "\n")
+        })
+    }
+}
