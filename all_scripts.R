@@ -59,7 +59,7 @@ p <- ggplot(plot_data, aes(x = type, y = neoantigen_count)) +
     )
 ggsave("neoantigen_count_dotplot.png", plot = p, width = 18, height = 6, dpi = 300)
 
-ls /fs/scratch/PAS1348/pvacseqoutput_annotated_somatic/ | grep -f - SLIDlist_pole_mutated_wild.txt | while IFS=$'\t' read -r _ i j _; do (echo -e "Gene_ID\tEnsembl_ID\t$(echo $j | tr '-' '_')"; cut -f 10 /fs/scratch/PAS1348/pvacseqoutput_annotated_somatic/$j/MHC_Class_I/$j*.filtered.tsv | tail -n +2 | grep -f - /fs/scratch/PAS1348/orien/2024_01_10/RNAseq/gene_and_transcript_expression_results/*$i*.genes.results | grep -v '_PAR_' | awk 'BEGIN{FS="\t"}{print $1"\t"$3"\t"$8}' | awk 'BEGIN{FS=OFS="\t"}{sub(/.[0-9][0-9]$/, "", $2); sub(/.[0-9]$/, "", $2)}1') > /fs/scratch/PAS1348/pvacseqoutput_annotated_somatic/${j%}.filtered.genecount.TPM.results; done
+ls /fs/scratch/PAS1348/pvacseqoutput_annotated_somatic/ | grep -f - SLIDlist_pole_mutated_wild.txt | while IFS=$'\t' read -r _ i j _; do (echo -e "Gene_ID\tEnsembl_ID\t$(echo $j | tr '-' '_')"; cut -f 10 /fs/scratch/PAS1348/pvacseqoutput_annotated_somatic/$j/MHC_Class_I/$j*.filtered.tsv | tail -n +2 | grep -f - /fs/scratch/PAS1348/orien/2024_01_10/RNAseq/gene_and_transcript_expression_results/*$i*.genes.results | grep -v '_PAR_' | awk 'BEGIN{FS="\t"}{print $1"\t"$3"\t"$8}') > /fs/scratch/PAS1348/pvacseqoutput_annotated_somatic/${j%}.filtered.genecount.TPM.results; done
 
 setwd("/fs/scratch/PAS1348/pvacseqoutput_annotated_somatic")
 library(tidyverse)
