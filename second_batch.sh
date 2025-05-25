@@ -1,3 +1,7 @@
 cut -f 2,77 gi_colorectal_cancer_clinical_data_control_group.tsv|  tail -n +2 |awk '$2~/^I/ {print $1}'  | sort -u| grep -f - 22PRJ098RIGIR_NormalizedFiles/22PRJ098RIGIR_20250317_ClinicalMolLinkage_V4.csv | grep 'Tumor'| cut -d ',' -f 1| grep -f - gi_colorectal_cancer_clinical_data_control_group.tsv | cut -f 2,77 |sort -u | sort -k 2 |awk '$2~/^I$|^IA$/ {s1[++c1]=$0; if(c1<=10) print} $2~/^II/ {s2[++c2]=$0; if(c2<=10) print} $2~/^III/ {s3[++c3]=$0; if(c3<=10) print} $2~/^IV/ {s4[++c4]=$0; if(c4<=10) print}' | cut -f 1| grep -f - 22PRJ098RIGIR_NormalizedFiles/22PRJ098RIGIR_20250317_ClinicalMolLinkage_V4.csv| grep 'Tumor'| cut -d ',' -f 5 | sed 's/\([0-9]\)[^0-9]*$/\1/'  | sort -u > scripts/20250317_control.txt
 
 cut -f 2 gi_colorectal_cancer_clinical_data_pole_alone_mutated.tsv | grep -f - 22PRJ098RIGIR_NormalizedFiles/22PRJ098RIGIR_20250317_ClinicalMolLinkage_V4.csv | grep 'Tumor'| cut -d ',' -f 5 | sed '/^$/d' | sed 's/\([0-9]\)[^0-9]*$/\1/'  | sort -u > scripts/20250317_mut.txt
+
+
+grep -f 20250317_mut.txt ../gi_colorectal_cancer_clinical_data_pole_alone_mutated.tsv | cut -f 3,77| sort -k 2 | awk '$2 ~ /^I/' | sed 's|;Unknown/Not Applicable||g' |sed 's/\_/\t/g'| awk '{gsub(/[^0-9]*$/, "", $2); gsub(/[^0-9]*$/, "", $3); if($4 ~ /^IV/) $4="IV"; else if($4 ~ /^III/) $4="III"; else if($4 ~ /^II/) $4="II"; else if($4 ~ /^I/) $4="I"; else $4=""; print}' |sed 's/ /\t/g' > 20250317_mut_stageinfo.txt
+
