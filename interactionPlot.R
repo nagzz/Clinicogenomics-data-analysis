@@ -52,6 +52,6 @@ p <- ggplot(summary_data %>% filter(Protein_change %in% top_proteins),
 # Display the plot with specific dimensions
 print(p)
 
-# If you want to save with specific dimensions:
+# To save with specific dimensions:
 # ggsave("protein_classifications_plot.png", plot = p, 
 #        width = 14, height = 10, dpi = 300, units = "in")
